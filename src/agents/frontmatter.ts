@@ -59,6 +59,13 @@ export function parseFrontmatterList(raw: string | undefined): string[] | undefi
 		.filter(Boolean);
 }
 
+/** `false` is a boolean, not a tool or extension name. */
+export function parseNamedList(raw: string | undefined): string[] | undefined {
+	if (raw === undefined) return undefined;
+	if (raw.trim() === "false") return [];
+	return parseFrontmatterList(raw)?.filter((item) => item !== "false");
+}
+
 /**
  * Parse YAML frontmatter from agent/chain files.
  * Handles both flat (key: value) and nested block (key: \n  sub: val) values.
