@@ -59,11 +59,19 @@ export function parseFrontmatterList(raw: string | undefined): string[] | undefi
 		.filter(Boolean);
 }
 
-/** `false` is a boolean, not a tool or extension name. */
+function unquoteName(value: string): string {
+	if (value.length >= 2 && ((value.startsWith("'") && value.endsWith("'")) || (value.startsWith('"') && value.endsWith('"')))) {
+		return value.slice(1, -1);
+	}
+	return value;
+}
+
+/** `false` and `none` mean an empty list, not a tool or extension name. */
 export function parseNamedList(raw: string | undefined): string[] | undefined {
 	if (raw === undefined) return undefined;
-	if (raw.trim() === "false") return [];
-	return parseFrontmatterList(raw)?.filter((item) => item !== "false");
+	const whole = unquoteName(raw.trim());
+	if (whole === "false" || whole === "none") return [];
+	return parseFrontmatterList(raw)?.map(unquoteName).filter((item) => item !== "false" && item !== "none");
 }
 
 /**

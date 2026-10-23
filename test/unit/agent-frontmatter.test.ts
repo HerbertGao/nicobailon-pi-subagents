@@ -279,7 +279,8 @@ body`);
 describe("false is not a name", () => {
 	it("treats false as an empty tool or extension list", () => {
 		assert.deepEqual(parseNamedList("false"), []);
-		assert.deepEqual(parseNamedList("read, false, bash"), ["read", "bash"]);
+		assert.deepEqual(parseNamedList("none"), []);
+		assert.deepEqual(parseNamedList('read, "false", bash'), ["read", "bash"]);
 		assert.equal(parseNamedList(undefined), undefined);
 	});
 
@@ -303,6 +304,17 @@ describe("false is not a name", () => {
 			const agent = discoverAgents(project, "project").agents.find((item) => item.name === "reviewer");
 			assert.deepEqual(agent?.tools, ["read"]);
 			assert.deepEqual(agent?.extensions, []);
+			writeAgent(path.join(project, ".pi", "agents", "plain.md"), [
+				"---",
+				"name: plain",
+				"description: Inherits tools",
+				"---",
+				"Work.",
+				"",
+			].join("\n"));
+			const plain = discoverAgents(project, "project").agents.find((item) => item.name === "plain");
+			assert.equal(plain?.tools, undefined);
+			assert.equal(plain?.extensions, undefined);
 		} finally {
 			if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
 			else process.env.PI_CODING_AGENT_DIR = previous;
