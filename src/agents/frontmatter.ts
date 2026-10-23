@@ -140,7 +140,10 @@ export function parseFrontmatter(content: string): { frontmatter: Record<string,
 			const [key, rawValueValue] = match.slice(1);
 			if (key === undefined || rawValueValue === undefined) continue;
 			const rawValue = rawValueValue.trim();
-			const isQuoted = (rawValue.startsWith('"') && rawValue.endsWith('"')) || (rawValue.startsWith("'") && rawValue.endsWith("'"));
+			const quote = rawValue[0];
+			// `"false", "none"` starts and ends with a quote, but it is a list. Keep those item quotes for the splitter.
+			const quotedList = (quote === '"' || quote === "'") && (rawValue.includes(`${quote},`) || rawValue.includes(`, ${quote}`));
+			const isQuoted = !quotedList && ((rawValue.startsWith('"') && rawValue.endsWith('"')) || (rawValue.startsWith("'") && rawValue.endsWith("'")));
 			const value = isQuoted ? rawValue.slice(1, -1) : rawValue;
 			const isFolded = !isQuoted && (rawValue === ">" || rawValue === ">-");
 			const isLiteral = !isQuoted && (rawValue === "|" || rawValue === "|-");
