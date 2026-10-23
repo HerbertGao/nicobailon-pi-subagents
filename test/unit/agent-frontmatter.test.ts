@@ -284,6 +284,8 @@ describe("false is not a name", () => {
 		assert.equal(parseNamedList(undefined), undefined);
 		const quotedList = parseFrontmatter('---\ntools: "false", "none"\nname: worker\n---\nbody');
 		assert.deepEqual(parseNamedList(quotedList.frontmatter.tools), []);
+		const description = parseFrontmatter('---\ndescription: "Review \\"a\\", then continue"\nname: worker\n---\nbody');
+		assert.equal(description.frontmatter.description, 'Review \\"a\\", then continue');
 	});
 
 	it("does not load an extension or tool named false", () => {

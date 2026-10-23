@@ -141,8 +141,9 @@ export function parseFrontmatter(content: string): { frontmatter: Record<string,
 			if (key === undefined || rawValueValue === undefined) continue;
 			const rawValue = rawValueValue.trim();
 			const quote = rawValue[0];
+			const nameList = key === "tools" || key === "excludeTools" || key === "mutationTools" || key === "extensions" || key === "subagentOnlyExtensions";
 			// `"false", "none"` starts and ends with a quote, but it is a list. Keep those item quotes for the splitter.
-			const quotedList = (quote === '"' || quote === "'") && (rawValue.includes(`${quote},`) || rawValue.includes(`, ${quote}`));
+			const quotedList = nameList && (quote === '"' || quote === "'") && (rawValue.includes(`${quote},`) || rawValue.includes(`, ${quote}`));
 			const isQuoted = !quotedList && ((rawValue.startsWith('"') && rawValue.endsWith('"')) || (rawValue.startsWith("'") && rawValue.endsWith("'")));
 			const value = isQuoted ? rawValue.slice(1, -1) : rawValue;
 			const isFolded = !isQuoted && (rawValue === ">" || rawValue === ">-");
