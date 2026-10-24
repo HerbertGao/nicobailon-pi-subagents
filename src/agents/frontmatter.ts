@@ -66,12 +66,9 @@ function unquoteName(value: string): string {
 	return value;
 }
 
-/** `false` and `none` mean an empty list, not a tool or extension name. */
-export function parseNamedList(raw: string | undefined): string[] | undefined {
-	if (raw === undefined) return undefined;
-	const whole = unquoteName(raw.trim());
-	if (whole === "false" || whole === "none") return [];
-	return parseFrontmatterList(raw)?.map(unquoteName).filter((item) => item !== "false" && item !== "none");
+/** A tool or extension name list whose items may each be quoted, as in `"read", "bash"` or `- "read"`. */
+export function parseUnquotedList(raw: string | undefined): string[] | undefined {
+	return parseFrontmatterList(raw)?.map(unquoteName);
 }
 
 /**
@@ -142,7 +139,7 @@ export function parseFrontmatter(content: string): { frontmatter: Record<string,
 			const rawValue = rawValueValue.trim();
 			const quote = rawValue[0];
 			const nameList = key === "tools" || key === "excludeTools" || key === "mutationTools" || key === "extensions" || key === "subagentOnlyExtensions";
-			// `"false", "none"` starts and ends with a quote, but it is a list. Keep those item quotes for the splitter.
+			// `"read", "bash"` starts and ends with a quote, but it is a list. Keep those item quotes for the splitter.
 			const quotedList = nameList && (quote === '"' || quote === "'") && (rawValue.includes(`${quote},`) || rawValue.includes(`, ${quote}`));
 			const isQuoted = !quotedList && ((rawValue.startsWith('"') && rawValue.endsWith('"')) || (rawValue.startsWith("'") && rawValue.endsWith("'")));
 			const value = isQuoted ? rawValue.slice(1, -1) : rawValue;
