@@ -19,6 +19,7 @@ import type { ExtensionBindings } from "../runs/shared/extension-bindings.ts";
 import type { WorkflowChildPermitContext } from "./workflow-child-permit.ts";
 import type { WatchdogWarningDetails } from "../watchdog/types.ts";
 import type { RequiredChildExtensionSnapshot } from "./required-child-extensions.ts";
+import type { RecordedPid } from "../runs/background/stale-run-reconciler.ts";
 
 // ============================================================================
 // Basic Types
@@ -1311,7 +1312,7 @@ export interface SingleResult {
 	usage: Usage;
 	model?: string;
 	/** Authoritative before/after Git evidence captured by a pane-native remote machine. */
-	nativeMachine?: { provider: "herdr"; machineId: string; initialGit?: HerdrRemoteGitStatus; finalGit?: HerdrRemoteGitStatus };
+	nativeMachine?: { provider: PlacementMachineReference["provider"]; machineId: string; initialGit?: HerdrRemoteGitStatus; finalGit?: HerdrRemoteGitStatus };
 	/** Effective thinking level used by this foreground child, when known. */
 	thinking?: string;
 	requestedModel?: string;
@@ -1539,10 +1540,14 @@ export interface Details {
 		argsDigest?: string;
 		/** SHA-256 of the workflow script source (async workflows). */
 		scriptDigest?: string;
-		/** Structured stop cause; set only when the owning extension runtime was replaced. */
-		stopCause?: "runtime-replaced";
-		/** Runtime-replaced workflow run whose finished children this run reused. */
+		/** Structured stop cause: `runtime-replaced` when the owning extension runtime was replaced; `owner-exited` when stale-run reconciliation found the owning Pi process dead. */
+		stopCause?: "runtime-replaced" | "owner-exited";
+		/** Interrupted workflow run whose finished children this run reused. */
 		reusedFrom?: string;
+		/** Owner-exited runs: the last time the dead Pi process updated the run (epoch ms), not the repair time. */
+		ownerExitedAt?: number;
+		/** Set on a run that resumes an interrupted one; `attempt` counts resumes that followed Pi exits. */
+		resumeOrigin?: { sourceRunId: string; attempt: number };
 		resource?: WorkflowResourceProvenance;
 		preflightWarnings?: string[];
 		trace: Array<{
@@ -1558,7 +1563,7 @@ export interface Details {
 			generatedLaneKey?: string;
 			warning?: string;
 			error?: string;
-			/** Came from a previous runtime-replaced run of the same script (and args, unless named by options.reuseFrom); this run launched nothing. */
+			/** Came from a previous runtime-replaced or owner-exited run of the same script (and args, unless named by options.reuseFrom); this run launched nothing. */
 			reused?: boolean;
 		}>;
 		emits: unknown[];
@@ -1798,6 +1803,28 @@ export interface HerdrMachineReference {
 	cwd: string;
 }
 
+/** `machine: "local"`: a Rex pane in the parent's own Rex session on this machine. `session` is the Rex session id and `server` the Rex server address, both recorded in the parent at resolution time; `cwd` is the local launch directory. */
+export interface RexLocalMachineReference {
+	provider: "rex";
+	id: "local";
+	session: string;
+	server?: string;
+	cwd: string;
+}
+
+/** A Rex machine reached over SSH, named in user settings (`subagents.machines.<id>.rex.ssh`). The pane opens in that machine's Rex session labeled `subagents`, found or created at launch and recorded with the run; `cwd` is the directory on that machine. */
+export interface RexSshMachineReference {
+	provider: "rex";
+	id: string;
+	target: string;
+	cwd: string;
+}
+
+export type RexMachineReference = RexLocalMachineReference | RexSshMachineReference;
+
+/** Where a placed native Pi child runs. */
+export type PlacementMachineReference = HerdrMachineReference | RexMachineReference;
+
 export interface ExternalCliMachineStatus extends HerdrMachineReference {
 	remoteGit?: HerdrRemoteGitStatus;
 }
@@ -1903,6 +1930,8 @@ export interface AsyncStatus {
 	runId: string;
 	/** Parent Pi process/window that owns local completion delivery. */
 	completionOwnerId?: string;
+	/** The Pi process behind `completionOwnerId`; once it is dead, the session that owns the run delivers it. */
+	completionOwnerProcess?: RecordedPid;
 	/** Host tool-call id retained when it differs from the internal run id. */
 	toolCallId?: string;
 	sessionId?: string;
@@ -1939,6 +1968,8 @@ export interface AsyncStatus {
 	pid?: number;
 	/** Linux PID namespace identity used to scope liveness probes. */
 	pidNamespaceScope?: string;
+	/** Boot id of the machine when `pid` was recorded; a different current boot id proves the pid dead. */
+	bootId?: string;
 	cwd?: string;
 	/** User-configured launcher that wrapped the background runner (argv only, never environment). */
 	launcher?: RunnerLauncher;
@@ -2211,6 +2242,12 @@ export interface ForegroundResumeRun {
 	sessionId?: string;
 	updatedAt: number;
 	children: ForegroundResumeChild[];
+	/** Pi process running this run; only on records whose child is `running`. */
+	ownerPid?: number;
+	ownerPidNamespaceScope?: string;
+	ownerBootId?: string;
+	/** Workflow that launched this foreground child. */
+	parentWorkflowRunId?: string;
 }
 
 export interface ForegroundChildControl {
@@ -2507,7 +2544,7 @@ export interface RunSyncOptions {
 	context?: "fresh" | "fork";
 	cwd?: string;
 	/** Resolved pane-native saved-machine placement. */
-	machine?: HerdrMachineReference;
+	machine?: PlacementMachineReference;
 	/** Explicit read override resolved by the remote ambient agent profile. */
 	remoteReads?: string[] | false;
 	/** Original cwd input retained for launch diagnostics. */
@@ -2693,6 +2730,8 @@ export interface ActiveAsyncCapacityConfig {
 
 export interface ExtensionConfig {
 	asyncByDefault?: boolean;
+	/** Relaunch this session's interrupted async workflows when the session is reopened or reloaded (default true). */
+	autoResume?: boolean;
 	/** Set the context for launches that omit an explicit context. */
 	defaultSubagentContext?: "fresh" | "fork";
 	/** Configure how every resolved fork session is prepared before child spawn. */
